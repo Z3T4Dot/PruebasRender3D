@@ -1,0 +1,15 @@
+
+[
+  {
+    "id": "cabinet1",
+    "name": "Gabinete 120x181x57",
+    "dimensions": [1.2, 1.81, 0.57],
+    "color": "#ffffff"
+  },
+  {
+    "id": "shelf1",
+    "name": "Estante de pared",
+    "dimensions": [1, 0.4, 0.3],
+    "color": "#eeeeee"
+  }
+]
