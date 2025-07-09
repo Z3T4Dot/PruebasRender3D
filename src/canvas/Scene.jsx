@@ -1,12 +1,14 @@
 import { Canvas } from "@react-three/fiber"
 import { OrbitControls, Grid } from "@react-three/drei"
-import { useRef, useCallback, useEffect } from "react"
+import { useRef, useCallback, useEffect, useState } from "react"
 import SceneObject from "../components/SceneObject"
 import * as THREE from "three"
+import sceneConfig from "../config/sceneConfig"
 
 export default function Scene({ sceneObjects, setSceneObjects, selectedId, setSelectedId }) {
   const wallsRef = useRef([])
   const controlsRef = useRef()
+  const [transparentWalls, setTransparentWalls] = useState([false, false, false, false])
 
   const updateObject = (id, newData) => {
     setSceneObjects((prev) => prev.map((o) => (o.id === id ? newData : o)))
@@ -42,20 +44,60 @@ export default function Scene({ sceneObjects, setSceneObjects, selectedId, setSe
   }, [handleGlobalPointerUp])
 
   // Definir paredes de la escena
-  const wallThickness = 0.2
-  const roomSize = 10
-  const wallHeight = 3
+  const wallThickness = sceneConfig.wallThickness
+  const roomSize = sceneConfig.roomSize
+  const wallHeight = sceneConfig.wallHeight
 
-  const walls = [
+  // Función para actualizar la transparencia de las paredes según la posición de la cámara
+  const updateWallsTransparency = () => {
+    if (!controlsRef.current) return
+    const camera = controlsRef.current.object
+    const pos = camera.position
+
+
+    // Calcular ángulos o posiciones para determinar qué paredes hacer transparentes
+    // Aquí se usa la posición de la cámara para decidir
+    // Paredes: 0-back, 1-front, 2-left, 3-right
+    const newTransparency = [false, false, false, false]
+
+    // Si la cámara está mirando hacia la pared frontal o trasera y cerca de ellas, hacerlas transparentes
+    if (pos.z > 2) {
+      newTransparency[1] = true // pared frontal
+    } else if (pos.z < -2) {
+      newTransparency[0] = true // pared trasera
+    }
+
+    // Si la cámara está cerca de la pared izquierda o derecha, hacerlas transparentes
+    if (pos.x < -2) {
+      newTransparency[2] = true // pared izquierda
+    } else if (pos.x > 2) {
+      newTransparency[3] = true // pared derecha
+    }
+
+    setTransparentWalls(newTransparency)
+  }
+
+  // Actualizar transparencia en cada frame
+  useEffect(() => {
+    const callback = () => {
+      updateWallsTransparency()
+      requestAnimationFrame(callback)
+    }
+    callback()
+    return () => cancelAnimationFrame(callback)
+  }, [])
+
+    const walls = [
     // Pared trasera
     <mesh
       key="wall-back"
       position={[0, wallHeight / 2, -roomSize / 2]}
       ref={(el) => (wallsRef.current[0] = el)}
       receiveShadow
+      visible={!transparentWalls[0]}
     >
       <boxGeometry args={[roomSize, wallHeight, wallThickness]} />
-      <meshStandardMaterial color="#888888" />
+      <meshStandardMaterial color="#888888" transparent={transparentWalls[0]} opacity={transparentWalls[0] ? 0 : 1} />
     </mesh>,
     // Pared frontal
     <mesh
@@ -63,9 +105,10 @@ export default function Scene({ sceneObjects, setSceneObjects, selectedId, setSe
       position={[0, wallHeight / 2, roomSize / 2]}
       ref={(el) => (wallsRef.current[1] = el)}
       receiveShadow
+      visible={!transparentWalls[1]}
     >
       <boxGeometry args={[roomSize, wallHeight, wallThickness]} />
-      <meshStandardMaterial color="#888888" />
+      <meshStandardMaterial color="#888888" transparent={transparentWalls[1]} opacity={transparentWalls[1] ? 0 : 1} />
     </mesh>,
     // Pared izquierda
     <mesh
@@ -73,9 +116,10 @@ export default function Scene({ sceneObjects, setSceneObjects, selectedId, setSe
       position={[-roomSize / 2, wallHeight / 2, 0]}
       ref={(el) => (wallsRef.current[2] = el)}
       receiveShadow
+      visible={!transparentWalls[2]}
     >
       <boxGeometry args={[wallThickness, wallHeight, roomSize]} />
-      <meshStandardMaterial color="#888888" />
+      <meshStandardMaterial color="#888888" transparent={transparentWalls[2]} opacity={transparentWalls[2] ? 0 : 1} />
     </mesh>,
     // Pared derecha
     <mesh
@@ -83,9 +127,10 @@ export default function Scene({ sceneObjects, setSceneObjects, selectedId, setSe
       position={[roomSize / 2, wallHeight / 2, 0]}
       ref={(el) => (wallsRef.current[3] = el)}
       receiveShadow
+      visible={!transparentWalls[3]}
     >
       <boxGeometry args={[wallThickness, wallHeight, roomSize]} />
-      <meshStandardMaterial color="#888888" />
+      <meshStandardMaterial color="#888888" transparent={transparentWalls[3]} opacity={transparentWalls[3] ? 0 : 1} />
     </mesh>
   ]
 
@@ -121,6 +166,7 @@ export default function Scene({ sceneObjects, setSceneObjects, selectedId, setSe
             onSelect={handleSelect}
             sceneWalls={wallsRef.current}
             controls={controlsRef.current}
+            allObjects={sceneObjects}
           />
         ))}
         <OrbitControls 

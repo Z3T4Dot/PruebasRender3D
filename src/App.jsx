@@ -223,3 +223,54 @@ function App() {
       color: item.color || "#3b82f6",
       furnitureId: item.id
     }
+    setSceneObjects(prev => [...prev, newObject])
+    setSelectedId(newObject.id)
+  }
+
+  const handleModelImport = (modelData) => {
+    const newObject = {
+      id: Date.now(),
+      type: 'model',
+      name: modelData.name || 'Modelo Importado',
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      color: "#3b82f6",
+      modelUrl: modelData.url
+    }
+    setSceneObjects(prev => [...prev, newObject])
+    setSelectedId(newObject.id)
+  }
+
+  return (
+    <div className="h-screen flex bg-gradient-to-br from-slate-100 to-slate-200">
+      {error && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50">
+          {error}
+        </div>
+      )}
+      
+      <div className="flex-1">
+        <Scene 
+          sceneObjects={sceneObjects}
+          setSceneObjects={setSceneObjects}
+          selectedId={selectedId}
+          setSelectedId={setSelectedId}
+        />
+      </div>
+      
+      <Sidebar
+        onAddObject={addObject}
+        selectedId={selectedId}
+        onDuplicateSelected={duplicateSelected}
+        onDeleteSelected={deleteSelected}
+        onExportScene={exportScene}
+        onImportScene={importScene}
+        onAddFurniture={handleAddFurniture}
+        onModelImport={handleModelImport}
+      />
+    </div>
+  )
+}
+
+export default App
