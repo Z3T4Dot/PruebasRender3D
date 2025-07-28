@@ -4,12 +4,31 @@
     "id": "cabinet1",
     "name": "Gabinete 120x181x57",
     "dimensions": [1.2, 1.81, 0.57],
-    "color": "#ffffff"
+    "color": "#ffffff",
+    "mountable": false
   },
   {
     "id": "shelf1",
     "name": "Estante de pared",
     "dimensions": [1, 0.4, 0.3],
-    "color": "#eeeeee"
+    "color": "#eeeeee",
+    "mountable": true,
+    "mountSides": ["north", "south", "east", "west"]
+  },
+  {
+    "id": "shelf2",
+    "name": "Estante",
+    "dimensions": [1.4, 0.4, 0.5],
+    "color": "#eeeeee",
+    "mountable": true,
+    "mountSides": ["north", "south", "east", "west"]
+  },
+  {
+    "id": "shelf3",
+    "name": "Repisa de pared",
+    "dimensions": [1.4, 0.4, 1],
+    "color": "#eeeeee",
+    "mountable": true,
+    "mountSides": ["north", "south", "east", "west"]
   }
 ]
