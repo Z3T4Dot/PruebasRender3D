@@ -43,21 +43,6 @@ export default function Sidebar({
   return (
     <aside className="sidebar">
       <section className="panel">
-        <h2>3D Básicos</h2>
-        <div className="button-grid">
-          {["cube", "sphere", "cylinder", "cone"].map((type) => (
-            <button
-              key={type}
-              onClick={() => onAddObject(type)}
-              className="btn btn-outline"
-            >
-              {type.charAt(0).toUpperCase() + type.slice(1)}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel">
         <h2>Archivo</h2>
         <button onClick={onExportScene} className="btn btn-ghost full">
           Exportar escena

@@ -1,38 +1,54 @@
-// src/components/SceneObject.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// src/components/SceneObject.tsx
+// ─────────────────────────────────────────────────────────────────────────────
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { Edges } from "@react-three/drei";
 import DimensionLines from "./DimensionLines";
 
+export interface SceneObjectProps {
+  object: any;
+  onUpdate: (id: number, data: any) => void;
+  isSelected: boolean;
+  onSelect: (id: number) => void;
+  sceneWalls: { minX: number; maxX: number; minZ: number; maxZ: number };
+  controls: any;
+  ceilingHeight: number;            // ← lo recibimos
+  allObjects: any[];
+}
+
 export default function SceneObject({
   object,
   onUpdate,
   isSelected,
   onSelect,
-  sceneWalls,   // { minX, maxX, minZ, maxZ }
+  sceneWalls,
   controls,
+  ceilingHeight,      // ← aquí
   allObjects,
-}) {
-  const meshRef = useRef(null);
+}: SceneObjectProps) {
+  const meshRef = useRef<THREE.Mesh>(null!);
   const { camera, gl, raycaster } = useThree();
 
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
+  const [isDragging, setIsDragging]   = useState(false);
+  const [dragOffset, setDragOffset]   = useState(new THREE.Vector3());
+  const [hitCeiling, setHitCeiling]   = useState(false);
 
-  // Sincronizar transformaciones
+  // 1) Sincronizar transformaciones
   useEffect(() => {
     if (!isDragging && meshRef.current) {
-      meshRef.current.position.set(...object.position);
-      meshRef.current.rotation.set(...object.rotation);
-      meshRef.current.scale.set(...object.scale);
+      const m = meshRef.current;
+      m.position.set(...object.position);
+      m.rotation.set(...object.rotation);
+      m.scale.set(...object.scale);
     }
   }, [object, isDragging]);
 
-  // Iniciar selección o arrastre
-  const handlePointerDown = (e) => {
+  // 2) Start drag o select
+  const handlePointerDown = (e: THREE.Event<PointerEvent>) => {
     e.stopPropagation();
-    if (e.button !== 0) return;
+    if (e.pointerType !== "mouse" || e.nativeEvent.button !== 0) return;
     if (!isSelected) {
       onSelect(object.id);
       return;
@@ -41,100 +57,109 @@ export default function SceneObject({
     const pt = e.intersections[0]?.point;
     if (pt) setDragOffset(meshRef.current.position.clone().sub(pt));
     controls.enabled = false;
-    gl.domElement.setPointerCapture(e.pointerId);
+    gl.domElement.setPointerCapture(e.nativeEvent.pointerId);
   };
-  const handlePointerUp = (e) => {
+
+  const handlePointerUp = (e: THREE.Event<PointerEvent>) => {
     if (!isDragging) return;
     e.stopPropagation();
     setIsDragging(false);
+    setHitCeiling(false);
     controls.enabled = true;
-    if (gl.domElement.hasPointerCapture(e.pointerId)) {
-      gl.domElement.releasePointerCapture(e.pointerId);
+    if (gl.domElement.hasPointerCapture(e.nativeEvent.pointerId)) {
+      gl.domElement.releasePointerCapture(e.nativeEvent.pointerId);
     }
   };
 
-  // Detectar colisiones entre objetos
+  // 3) Chequeo colisión con otros
   const checkCollisions = useCallback(
-    (pos, scale) => {
-      const box = new THREE.Box3().setFromCenterAndSize(pos, scale);
-      return allObjects.some((o) => {
+    (pos: THREE.Vector3, scale: THREE.Vector3) => {
+      const b = new THREE.Box3().setFromCenterAndSize(pos, scale);
+      return allObjects.some(o => {
         if (o.id === object.id) return false;
-        const otherBox = new THREE.Box3().setFromCenterAndSize(
+        const ob = new THREE.Box3().setFromCenterAndSize(
           new THREE.Vector3(...o.position),
           new THREE.Vector3(...o.scale)
         );
-        return box.intersectsBox(otherBox);
+        return b.intersectsBox(ob);
       });
     },
     [allObjects, object.id]
   );
 
-  // Manejador global de arrastre
+  // 4) Drag global
   useEffect(() => {
     if (!isDragging) return;
-    const handleMove = (e) => {
-      e.preventDefault();
+    const move = (ev: PointerEvent) => {
+      ev.preventDefault();
       const rect = gl.domElement.getBoundingClientRect();
-      const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      const my = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      const mx = ((ev.clientX - rect.left)  / rect.width ) * 2 - 1;
+      const my = -((ev.clientY - rect.top)  / rect.height) * 2 + 1;
       raycaster.setFromCamera({ x: mx, y: my }, camera);
-      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-      const pt = new THREE.Vector3();
-      if (raycaster.ray.intersectPlane(plane, pt)) {
-        const raw = pt.clone().add(dragOffset);
 
-        // Calcular medio tamaño del objeto
-        const halfX = meshRef.current.scale.x / 2;
-        const halfZ = meshRef.current.scale.z / 2;
+      // siempre plano horizontal
+      const plane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+      const pt    = new THREE.Vector3();
+      if (!raycaster.ray.intersectPlane(plane, pt)) return;
 
-        // Limitar centro para que los bordes no crucen las paredes
-        raw.x = THREE.MathUtils.clamp(
-          raw.x,
-          sceneWalls.minX + halfX,
-          sceneWalls.maxX - halfX
-        );
-        raw.z = THREE.MathUtils.clamp(
-          raw.z,
-          sceneWalls.minZ + halfZ,
-          sceneWalls.maxZ - halfZ
-        );
+      const raw = pt.clone().add(dragOffset);
+      const half = meshRef.current.scale.clone().multiplyScalar(0.5);
 
-        // Mantener la altura mínima en Y
-        raw.y = Math.max(meshRef.current.scale.y / 2, 0);
+      // clamp X/Z
+      raw.x = THREE.MathUtils.clamp(raw.x,
+        sceneWalls.minX + half.x,
+        sceneWalls.maxX - half.x
+      );
+      raw.z = THREE.MathUtils.clamp(raw.z,
+        sceneWalls.minZ + half.z,
+        sceneWalls.maxZ - half.z
+      );
 
-        // Verificar colisiones con otros objetos
-        if (!checkCollisions(raw, meshRef.current.scale)) {
-          meshRef.current.position.copy(raw);
-          onUpdate(object.id, {
-            ...object,
-            position: [raw.x, raw.y, raw.z],
-          });
-        }
+      // CLAMP Y ENTRE PISO Y TECHO
+      const minY = half.y;
+      const maxY = ceilingHeight - half.y;
+      if (raw.y > maxY) {
+        raw.y = maxY;
+        setHitCeiling(true);
+      } else {
+        raw.y = Math.max(raw.y, minY);
+        setHitCeiling(false);
+      }
+
+      // colisión muebles
+      if (!checkCollisions(raw, meshRef.current.scale)) {
+        meshRef.current.position.copy(raw);
+        onUpdate(object.id, {
+          ...object,
+          position: [raw.x, raw.y, raw.z],
+        });
       }
     };
-    const handleUp = () => {
+
+    const up = (ev: PointerEvent) => {
       setIsDragging(false);
+      setHitCeiling(false);
       controls.enabled = true;
-      document.removeEventListener("pointermove", handleMove);
-      document.removeEventListener("pointerup", handleUp);
+      if (gl.domElement.hasPointerCapture(ev.pointerId)) {
+        gl.domElement.releasePointerCapture(ev.pointerId);
+      }
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
     };
-    document.addEventListener("pointermove", handleMove);
-    document.addEventListener("pointerup", handleUp);
+
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
     return () => {
-      document.removeEventListener("pointermove", handleMove);
-      document.removeEventListener("pointerup", handleUp);
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
     };
   }, [
-    isDragging,
-    dragOffset,
-    object,
-    sceneWalls,
+    isDragging, dragOffset,
+    sceneWalls, ceilingHeight,
     checkCollisions,
-    camera,
-    gl.domElement,
-    raycaster,
-    controls,
-    onUpdate,
+    camera, raycaster,
+    gl.domElement, controls,
+    onUpdate, object.id
   ]);
 
   return (
@@ -143,30 +168,21 @@ export default function SceneObject({
         ref={meshRef}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!isSelected) onSelect(object.id);
-        }}
         castShadow
         receiveShadow
       >
-        {/* Renderizar siempre como caja usando la escala del objeto */}
-        {/* Caja unitaria, luego escalada por mesh.scale */}
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color={object.color || "lightgray"} />
-
-        {/* Outline */}
+        <boxGeometry args={[1,1,1]} />
+        <meshStandardMaterial color={hitCeiling ? "#ff4d4d" : object.color || "lightgray"} />
         {isSelected && (
           <Edges
             scale={1.02}
             threshold={15}
-            color="#2724fbff"
+            color={hitCeiling ? "red" : "#fbbf24"}
             renderOrder={999}
           />
         )}
       </mesh>
 
-      {/* Líneas de medida dinámicas */}
       {isSelected && (
         <DimensionLines
           object={object}
